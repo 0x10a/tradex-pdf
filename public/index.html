@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>TRADEX</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root{
+  --bg:#f5f5f7;
+  --surface:#ffffff;
+  --border:#e8e8ed;
+  --border-strong:#d2d2d7;
+  --text:#1d1d1f;
+  --text-secondary:#6e6e73;
+  --text-tertiary:#aeaeb2;
+  --accent:#0071e3;
+  --accent-hover:#0077ed;
+  --accent-bg:#e8f2fd;
+  --green:#30b158;
+  --green-bg:#e8f8ed;
+  --red:#e53e3e;
+  --red-bg:#fef0f0;
+  --radius:14px;
+  --radius-sm:10px;
+  --transition:0.2s cubic-bezier(0.4,0,0.2,1);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:14px;line-height:1.5;background:var(--bg);color:var(--text);
+  -webkit-font-smoothing:antialiased;letter-spacing:-0.01em;
+}
+.app{display:flex;flex-direction:column;min-height:100vh}
+
+/* ── Titlebar ──────────────────────────────────────────────────── */
+.tb{
+  flex-shrink:0;display:flex;align-items:center;height:52px;
+  background:rgba(255,255,255,0.8);backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);padding:0 24px;user-select:none;
+  position:sticky;top:0;z-index:10;
+}
+.tb-logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;color:var(--text)}
+.tb-icon{
+  width:32px;height:32px;background:var(--text);color:#fff;
+  border-radius:8px;display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:800;
+}
+.tb-sep{flex:1}
+
+/* ── Main ──────────────────────────────────────────────────────── */
+.main{flex:1;overflow-y:auto;padding:28px 20px 40px}
+.wrap{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+
+/* ── Upload zone ───────────────────────────────────────────────── */
+.dropzone{
+  border:2px dashed var(--border-strong);border-radius:var(--radius);
+  padding:44px 32px;text-align:center;cursor:pointer;
+  transition:all var(--transition);background:var(--surface);
+  position:relative;overflow:hidden;
+}
+.dropzone::before{
+  content:'';position:absolute;inset:0;opacity:0;
+  background:radial-gradient(circle at center,var(--accent-bg) 0%,transparent 70%);
+  transition:opacity var(--transition);
+}
+.dropzone:hover,.dropzone.drag{border-color:var(--accent)}
+.dropzone:hover::before,.dropzone.drag::before{opacity:1}
+.dropzone.drag{border-style:solid;box-shadow:0 0 0 4px var(--accent-bg)}
+.dropzone-inner{position:relative;z-index:1}
+.dropzone-icon{
+  width:56px;height:56px;margin:0 auto 16px;background:var(--bg);
+  border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:24px;transition:transform var(--transition);
+}
+.dropzone:hover .dropzone-icon{transform:scale(1.08)}
+.dropzone-title{font-size:16px;font-weight:600;margin-bottom:4px}
+.dropzone-sub{font-size:13px;color:var(--text-secondary)}
+.dropzone input{position:absolute;inset:0;opacity:0;cursor:pointer;z-index:2}
+
+/* ── Cards ─────────────────────────────────────────────────────── */
+.card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);overflow:hidden;
+  transition:box-shadow var(--transition);
+}
+.card:hover{box-shadow:0 2px 12px rgba(0,0,0,0.04)}
+.card-head{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 20px;border-bottom:1px solid var(--border);
+  font-weight:600;font-size:14px;
+}
+.card-head-actions{display:flex;gap:8px}
+
+/* ── File list ─────────────────────────────────────────────────── */
+.files-scroll{max-height:340px;overflow-y:auto}
+.fi{
+  display:flex;align-items:center;gap:12px;
+  padding:12px 20px;border-bottom:1px solid var(--border);
+  transition:background var(--transition);
+}
+.fi:last-child{border-bottom:none}
+.fi:hover{background:var(--bg)}
+
+.fi-dot{
+  width:10px;height:10px;border-radius:50%;flex-shrink:0;
+  background:var(--text-tertiary);transition:all var(--transition);
+}
+.fi-dot.ok{background:var(--green);box-shadow:0 0 0 3px var(--green-bg)}
+.fi-dot.err{background:var(--red);box-shadow:0 0 0 3px var(--red-bg)}
+.fi-dot.proc{background:var(--accent);box-shadow:0 0 0 3px var(--accent-bg);animation:pulse 1.2s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.6;transform:scale(0.85)}}
+
+.fi-info{flex:1;min-width:0}
+.fi-name{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fi-meta{font-size:12px;color:var(--text-tertiary);margin-top:1px}
+
+.fi-lc{
+  flex-shrink:0;font-size:12px;font-weight:600;
+  font-family:"SF Mono","Cascadia Code","Consolas",monospace;
+  color:var(--accent);background:var(--accent-bg);
+  padding:3px 10px;border-radius:99px;max-width:200px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+
+/* ── Buttons ───────────────────────────────────────────────────── */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:8px 16px;font-size:13px;font-weight:500;font-family:inherit;
+  border-radius:99px;border:none;cursor:pointer;letter-spacing:-0.01em;
+  transition:all var(--transition);white-space:nowrap;
+  text-decoration:none;color:inherit;
+}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn:disabled{opacity:0.4;cursor:not-allowed;pointer-events:none}
+.btn-primary{background:var(--text);color:#fff}
+.btn-primary:hover:not(:disabled){background:#333}
+.btn-secondary{background:var(--bg);color:var(--text)}
+.btn-secondary:hover:not(:disabled){background:var(--border)}
+.btn-accent{background:var(--accent);color:#fff}
+.btn-accent:hover:not(:disabled){background:var(--accent-hover)}
+.btn-ghost{background:transparent;color:var(--text-secondary)}
+.btn-ghost:hover:not(:disabled){background:var(--bg);color:var(--text)}
+.btn-sm{padding:5px 12px;font-size:12px}
+
+/* ── Progress ───────────────────────────────────────────────────── */
+.prog-section{padding:0 20px 16px}
+.prog-track{height:4px;background:var(--border);border-radius:99px;overflow:hidden;margin-bottom:8px}
+.prog-bar{height:100%;background:var(--accent);border-radius:99px;transition:width 0.4s ease}
+.prog-text{display:flex;justify-content:space-between;font-size:12px;color:var(--text-secondary)}
+
+/* ── Stats pills ────────────────────────────────────────────────── */
+.stats{display:flex;gap:8px;padding:0 20px 14px}
+.stat{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 14px;border-radius:99px;font-size:12px;font-weight:500;
+  background:var(--bg);border:1px solid var(--border);
+}
+.stat-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.stat-dot.ok{background:var(--green)}
+.stat-dot.err{background:var(--red)}
+.stat strong{font-weight:700;margin-left:2px}
+
+/* ── Results table ──────────────────────────────────────────────── */
+.res-section{padding:0 20px 20px}
+.res-table{width:100%;border-collapse:collapse;font-size:13px}
+.res-table th{
+  text-align:left;padding:10px 12px;font-size:11px;font-weight:600;
+  text-transform:uppercase;letter-spacing:0.5px;color:var(--text-secondary);
+  border-bottom:2px solid var(--border);white-space:nowrap;
+}
+.res-table td{padding:12px 12px;border-bottom:1px solid var(--border)}
+.res-table tr:last-child td{border-bottom:none}
+.res-table td:nth-child(1){max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.res-lc{
+  font-family:"SF Mono","Cascadia Code","Consolas",monospace;
+  font-weight:600;color:var(--accent);font-size:13px;
+  background:var(--accent-bg);padding:2px 8px;border-radius:5px;
+  display:inline-block;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.res-ok{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:500;color:var(--green)}
+.res-err{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:500;color:var(--red)}
+.res-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.res-ok .res-dot{background:var(--green)}
+.res-err .res-dot{background:var(--red)}
+
+.res-actions{display:flex;gap:8px;padding:0 20px 20px}
+
+/* ── Download bar ────────────────────────────────────────────────── */
+.dl-bar{
+  display:flex;align-items:center;gap:12px;
+  padding:14px 20px;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);
+}
+.dl-bar-info{flex:1;min-width:0}
+.dl-bar-title{font-weight:600;font-size:14px}
+.dl-bar-sub{font-size:12px;color:var(--text-secondary)}
+
+/* ── Alert ──────────────────────────────────────────────────────── */
+.alert{
+  display:flex;align-items:center;gap:10px;
+  padding:12px 16px;border-radius:var(--radius-sm);
+  font-size:13px;font-weight:500;
+}
+.alert-err{background:var(--red-bg);color:var(--red)}
+
+/* ── Empty ──────────────────────────────────────────────────────── */
+.empty{text-align:center;padding:32px 16px;color:var(--text-tertiary)}
+.empty-ico{font-size:32px;margin-bottom:8px;opacity:0.5}
+
+/* ── Scrollbar ──────────────────────────────────────────────────── */
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:99px}
+
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="tb">
+    <div class="tb-logo">
+      <div class="tb-icon">T</div>
+      TRADEX
+    </div>
+    <div class="tb-sep"></div>
+  </header>
+
+  <main class="main">
+    <div class="wrap">
+
+      <!-- Upload -->
+      <div class="dropzone" id="dropzone">
+        <div class="dropzone-inner">
+          <div class="dropzone-icon">&#128229;</div>
+          <div class="dropzone-title">Déposez vos fichiers PDF</div>
+          <div class="dropzone-sub">ou cliquez pour parcourir — jusqu'à 50 fichiers, 20&nbsp;Mo chacun</div>
+        </div>
+        <input type="file" id="fileInput" accept=".pdf" multiple>
+      </div>
+
+      <!-- Alert -->
+      <div class="alert alert-err hidden" id="alert"><span>&#9888;</span><span id="alert-msg"></span></div>
+
+      <!-- File card -->
+      <div class="card hidden" id="fileCard">
+        <div class="card-head">
+          <span id="fileCount">0 fichier</span>
+          <div class="card-head-actions">
+            <button class="btn btn-accent hidden" id="btnStart" onclick="startProcessing()">&#9654;&ensp;Lancer le traitement</button>
+            <button class="btn btn-ghost btn-sm hidden" id="btnReset" onclick="resetAll()">&#8634;&ensp;Recommencer</button>
+          </div>
+        </div>
+        <div class="files-scroll" id="fileList"></div>
+        <div class="prog-section hidden" id="progSection">
+          <div class="prog-track"><div class="prog-bar" id="progBar" style="width:0%"></div></div>
+          <div class="prog-text"><span id="progLabel">Traitement…</span><span id="progCounter">0 / 0</span></div>
+        </div>
+        <div class="stats hidden" id="statsPills">
+          <div class="stat"><span>Total</span><strong id="statTotal">0</strong></div>
+          <div class="stat"><span class="stat-dot ok"></span><span>Succès</span><strong id="statOk">0</strong></div>
+          <div class="stat"><span class="stat-dot err"></span><span>Échecs</span><strong id="statErr">0</strong></div>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div class="card hidden" id="resultsCard">
+        <div class="card-head">Résultats du traitement</div>
+        <div class="res-section">
+          <table class="res-table">
+            <thead><tr><th>Fichier original</th><th>Numéro LC extrait</th><th>Statut</th></tr></thead>
+            <tbody id="resTbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Download bar -->
+      <div class="dl-bar hidden" id="dlBar">
+        <div class="dl-bar-info">
+          <div class="dl-bar-title">Téléchargement</div>
+          <div class="dl-bar-sub" id="dlBarSub"></div>
+        </div>
+        <button class="btn btn-accent" onclick="downloadAll()">&#128230;&ensp;Tout télécharger (ZIP)</button>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script>
+let SID = null, _files = [];
+
+const $ = s => document.querySelector(s);
+
+// ── Drag & drop ──────────────────────────────────────────────────
+const dz = $("#dropzone"), inp = $("#fileInput");
+["dragenter","dragover"].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.add("drag"); }));
+["dragleave","drop"].forEach(e => dz.addEventListener(e, ev => { ev.preventDefault(); dz.classList.remove("drag"); }));
+dz.addEventListener("drop", e => handleFiles(e.dataTransfer.files));
+inp.addEventListener("change", () => handleFiles(inp.files));
+
+async function handleFiles(fileList) {
+  if (!fileList || fileList.length === 0) return;
+  hideAlert();
+  const form = new FormData();
+  for (const f of fileList) { if (f.name.toLowerCase().endsWith(".pdf")) form.append("pdfs", f); }
+  if (!form.has("pdfs")) { showAlert("Aucun fichier PDF détecté."); return; }
+
+  dz.style.opacity = "0.4"; dz.style.pointerEvents = "none";
+  try {
+    const r = await fetch("/api/upload", { method: "POST", body: form });
+    const d = await r.json();
+    if (!r.ok) { showAlert(d.error); return; }
+    SID = d.session_id;
+    _files = d.files.map(f => ({ ...f, status: "pending", lc: null, err: null }));
+    render();
+  } catch (e) { showAlert("Erreur : " + e.message); }
+  finally { dz.style.opacity = "1"; dz.style.pointerEvents = "auto"; }
+}
+
+// ── Rendu liste ────────────────────────────────────────────────────
+function render() {
+  $("#fileCount").textContent = `${_files.length} fichier${_files.length>1?"s":""}`;
+  $("#fileList").innerHTML = _files.map((f, i) => `
+    <div class="fi" id="fi-${i}">
+      <div class="fi-dot" id="st-${i}"></div>
+      <div class="fi-info">
+        <div class="fi-name" title="${esc(f.original)}">${esc(f.original)}</div>
+        <div class="fi-meta" id="meta-${i}">En attente</div>
+      </div>
+      <div class="fi-lc hidden" id="lc-${i}"></div>
+    </div>
+  `).join("");
+  $("#fileCard").classList.remove("hidden");
+  $("#btnStart").classList.remove("hidden");
+  $("#resultsCard").classList.add("hidden");
+  $("#dlBar").classList.add("hidden");
+  $("#progSection").classList.add("hidden");
+  $("#statsPills").classList.add("hidden");
+}
+
+// ── Traitement ────────────────────────────────────────────────────
+async function startProcessing() {
+  if (!SID) return;
+  $("#btnStart").disabled = true;
+  $("#progSection").classList.remove("hidden");
+  $("#statsPills").classList.remove("hidden");
+  $("#btnReset").classList.remove("hidden");
+  $("#resultsCard").classList.add("hidden");
+  $("#dlBar").classList.add("hidden");
+
+  const es = new EventSource("/api/stream/" + SID);
+  es.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    const pct = m.total > 0 ? Math.round(m.processed / m.total * 100) : 0;
+    $("#progBar").style.width = pct + "%";
+    $("#progCounter").textContent = `${m.processed} / ${m.total}`;
+    $("#progLabel").textContent = m.type === "done" ? "Terminé" : (m.processed > 0 ? "Traitement en cours…" : "Connexion…");
+    $("#statTotal").textContent = m.total;
+    $("#statOk").textContent = m.ok;
+    $("#statErr").textContent = m.err;
+
+    for (const item of m.files) {
+      const idx = _files.findIndex(f => f.id === item.id);
+      if (idx < 0) continue;
+      _files[idx].status = item.status;
+      _files[idx].lc = item.lc;
+      _files[idx].err = item.err;
+      const st = $("#st-" + idx), meta = $("#meta-" + idx), lc = $("#lc-" + idx);
+      st.className = "fi-dot " + item.status;
+      if (item.status === "ok") {
+        meta.textContent = "✓ Traité";
+        lc.textContent = item.lc;
+        lc.classList.remove("hidden");
+      } else if (item.status === "error") {
+        meta.textContent = "✗ " + (item.err || "Erreur");
+      } else if (item.status === "processing") {
+        meta.textContent = "Analyse…";
+      }
+    }
+
+    if (m.type === "done") { es.close(); showResults(m); }
+  };
+  es.onerror = () => { es.close(); showAlert("Connexion perdue."); };
+}
+
+// ── Résultats ─────────────────────────────────────────────────────
+function showResults(m) {
+  $("#btnStart").classList.add("hidden");
+  $("#resultsCard").classList.remove("hidden");
+  $("#resTbody").innerHTML = _files.map(f =>
+    f.status === "ok"
+    ? `<tr><td title="${esc(f.original)}">${esc(trunc(f.original,40))}</td><td><span class="res-lc" title="${esc(f.lc)}">${esc(f.lc)}</span></td><td><span class="res-ok"><span class="res-dot"></span>Succès</span></td></tr>`
+    : `<tr><td title="${esc(f.original)}">${esc(trunc(f.original,40))}</td><td><span style="color:var(--text-tertiary)">—</span></td><td><span class="res-err" title="${esc(f.err||"")}"><span class="res-dot"></span>Échec</span></td></tr>`
+  ).join("");
+  if (m.ok > 0) {
+    $("#dlBarSub").textContent = `${m.ok} fichier${m.ok>1?"s":""} traité${m.ok>1?"s":""} avec succès`;
+    $("#dlBar").classList.remove("hidden");
+  }
+}
+
+function downloadAll() { if (SID) window.location.href = "/api/download-all/" + SID; }
+
+function resetAll() {
+  SID = null; _files = [];
+  $("#fileCard,#resultsCard,#dlBar,#progSection,#statsPills").forEach(e => e.classList.add("hidden"));
+  $("#btnStart").classList.remove("hidden");
+  $("#btnStart").disabled = false;
+  $("#btnReset").classList.add("hidden");
+  dz.style.opacity = "1"; dz.style.pointerEvents = "auto";
+  inp.value = "";
+}
+
+// ── Utils ────────────────────────────────────────────────────────
+function showAlert(msg) { $("#alert-msg").textContent = msg; $("#alert").classList.remove("hidden"); }
+function hideAlert() { $("#alert").classList.add("hidden"); }
+function esc(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+function trunc(s, n) { return s.length > n ? s.substring(0, n-1) + "…" : s; }
+</script>
+</body>
+</html>
