@@ -70,6 +70,11 @@ function sanitizeFilename(name) {
   return name.replace(_INVALID_CHARS, "_").trim() || "inconnu";
 }
 
+// ─── Express ───────────────────────────────────────────────────────────────
+const app = express();
+app.use(express.json());
+app.use(express.static(path.join(__dirname, "public")));
+
 // ─── Health check (Render) ──────────────────────────────────────────────
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
