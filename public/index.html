@@ -292,7 +292,7 @@ body{
 </div>
 
 <script>
-let SID = null, _files = [];
+let SID = null, _files = [], _idxById = new Map();
 
 const $ = s => document.querySelector(s);
 
@@ -317,6 +317,7 @@ async function handleFiles(fileList) {
     if (!r.ok) { showAlert(d.error); return; }
     SID = d.session_id;
     _files = d.files.map(f => ({ ...f, status: "pending", lc: null, err: null }));
+    _idxById = new Map(_files.map((f, i) => [f.id, i]));
     render();
   } catch (e) { showAlert("Erreur : " + e.message); }
   finally { dz.style.opacity = "1"; dz.style.pointerEvents = "auto"; }
@@ -365,8 +366,8 @@ async function startProcessing() {
     $("#statErr").textContent = m.err;
 
     for (const item of m.files) {
-      const idx = _files.findIndex(f => f.id === item.id);
-      if (idx < 0) continue;
+      const idx = _idxById.get(item.id);
+      if (idx === undefined) continue;
       _files[idx].status = item.status;
       _files[idx].lc = item.lc;
       _files[idx].err = item.err;

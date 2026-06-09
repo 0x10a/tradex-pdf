@@ -6,21 +6,22 @@ const { v4: uuidv4 } = require("uuid");
 const OpenAI = require("openai");
 const AdmZip = require("adm-zip");
 
-// ─── Configuration developpeur ─────────────────────────────────────────────
-const _API_KEY = process.env.OPENAI_API_KEY || "";
-const _MODEL = "gpt-5.4-mini";
+// ─── Configuration ─────────────────────────────────────────────────────────
+const _MODEL = process.env.TRADEX_MODEL || "gpt-4.1-mini";
 const _ORIGINAL_MODELS = new Set(["gpt-5.4", "gpt-5.4-pro", "gpt-5.5", "gpt-5.5-pro"]);
 const _PROMPT = "Analyse cette image et trouve la valeur correspondant au 'Numero LC'. Renvoie uniquement le numero exact (majuscules, chiffres, parfois des espaces), sans aucun autre texte ni ponctuation. Exemple : 058ICD 2503674099";
 const _INVALID_CHARS = /[\\/:*?"<>|]/g;
+const _CONCURRENCY = parseInt(process.env.TRADEX_CONCURRENCY || "6", 10);
+const _SESSION_TTL_MS = 30 * 60 * 1000; // 30 min
 
-// ─── Dossiers temp ─────────────────────────────────────────────────────────
+// ─── Dossier temp ───────────────────────────────────────────────────────────
 const TMP_DIR = path.join(__dirname, "_tmp");
 fs.mkdirSync(TMP_DIR, { recursive: true });
 
-// ─── OpenAI ────────────────────────────────────────────────────────────────
-const openai = new OpenAI({ apiKey: _API_KEY || process.env.OPENAI_API_KEY });
+// ─── OpenAI (lit OPENAI_API_KEY automatiquement) ────────────────────────────
+const openai = new OpenAI();
 
-// ─── Multer (stockage disque, 50 fichiers max, 20 Mo chacun) ──────────────
+// ─── Multer ─────────────────────────────────────────────────────────────────
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, TMP_DIR),
   filename: (_req, file, cb) => {
@@ -28,25 +29,47 @@ const storage = multer.diskStorage({
     cb(null, `${uuidv4()}_${safe}`);
   },
 });
-const upload = multer({ storage, limits: { fileSize: 20 * 1024 * 1024, files: 50 } });
+const upload = multer({
+  storage,
+  limits: { fileSize: 20 * 1024 * 1024, files: 50 },
+  fileFilter: (_req, file, cb) => {
+    const ok = file.mimetype === "application/pdf" || file.originalname.toLowerCase().endsWith(".pdf");
+    cb(null, ok);
+  },
+});
 
-// ─── Sessions ──────────────────────────────────────────────────────────────
+// ─── Sessions ───────────────────────────────────────────────────────────────
 const sessions = {};
 
+function scheduleSessionCleanup(sid) {
+  setTimeout(() => {
+    const sess = sessions[sid];
+    if (!sess) return;
+    for (const f of sess.files.values()) {
+      fs.rm(f.path, { force: true }, () => {});
+    }
+    delete sessions[sid];
+  }, _SESSION_TTL_MS);
+}
+
 // ─── PDF -> Base64 ──────────────────────────────────────────────────────────
-let _pdfModule = null;
+// Préchargé une seule fois au démarrage pour éviter les imports concurrents
+let _pdfModulePromise = null;
+function getPdfModule() {
+  if (!_pdfModulePromise) _pdfModulePromise = import("pdf-to-img");
+  return _pdfModulePromise;
+}
+
 async function pdfToBase64(filePath) {
-  if (!_pdfModule) {
-    _pdfModule = await import("pdf-to-img");
-  }
-  const doc = await _pdfModule.pdf(filePath, { scale: 2 });
+  const { pdf } = await getPdfModule();
+  const doc = await pdf(filePath, { scale: 2 });
   for await (const page of doc) {
     return Buffer.from(page).toString("base64");
   }
   throw new Error("PDF vide");
 }
 
-// ─── Extraction LC ─────────────────────────────────────────────────────────
+// ─── Extraction LC ──────────────────────────────────────────────────────────
 async function extractLC(b64) {
   const detail = _ORIGINAL_MODELS.has(_MODEL) ? "original" : "high";
   const r = await openai.responses.create({
@@ -70,34 +93,71 @@ function sanitizeFilename(name) {
   return name.replace(_INVALID_CHARS, "_").trim() || "inconnu";
 }
 
-// ─── Express ───────────────────────────────────────────────────────────────
+// ─── Traitement d'un fichier unique ─────────────────────────────────────────
+async function processOne(f) {
+  f.status = "processing";
+  try {
+    console.log(`[TRADEX] Traitement : ${f.original}`);
+    const b64 = await pdfToBase64(f.path);
+    const lc = await extractLC(b64);
+    f.lc = lc;
+    f.status = "ok";
+    console.log(`[TRADEX] OK : ${f.original} -> ${lc}`);
+  } catch (e) {
+    console.error(`[TRADEX] ERREUR : ${f.original} — ${e.message}`);
+    f.err = e.message;
+    f.status = "error";
+  }
+}
+
+// ─── Pool de concurrence ─────────────────────────────────────────────────────
+async function runWithConcurrency(tasks, limit) {
+  const queue = [...tasks];
+  const workers = Array.from({ length: Math.min(limit, queue.length) }, async () => {
+    while (queue.length) {
+      const task = queue.shift();
+      if (task) await task();
+    }
+  });
+  await Promise.all(workers);
+}
+
+// ─── Processing asynchrone (parallèle) ──────────────────────────────────────
+async function processFiles(sid) {
+  const sess = sessions[sid];
+  if (!sess) return;
+
+  const tasks = [...sess.files.values()].map(f => () => processOne(f));
+  await runWithConcurrency(tasks, _CONCURRENCY);
+
+  sess.done = true;
+  console.log(`[TRADEX] Session ${sid} terminee.`);
+}
+
+// ─── Express ────────────────────────────────────────────────────────────────
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// ─── Health check (Render) ──────────────────────────────────────────────
+// ▸ Health check
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 // ▸ Upload
 app.post("/api/upload", upload.array("pdfs", 50), (req, res) => {
   if (!req.files || req.files.length === 0) {
-    return res.status(400).json({ error: "Aucun fichier recu." });
+    return res.status(400).json({ error: "Aucun fichier PDF recu." });
   }
   const sid = uuidv4();
   const files = new Map();
   for (const f of req.files) {
     const fid = uuidv4();
-    files.set(fid, {
-      original: Buffer.from(f.originalname, "latin1").toString("utf8"),
-      path: f.path,
-      status: "pending",
-      lc: null,
-      err: null,
-    });
+    // originalname déjà converti en UTF-8 par le filename Multer
+    const original = Buffer.from(f.originalname, "latin1").toString("utf8");
+    files.set(fid, { original, path: f.path, status: "pending", lc: null, err: null });
   }
   sessions[sid] = { files, done: false };
+  scheduleSessionCleanup(sid);
 
-  // Lancement async
   processFiles(sid);
 
   res.json({
@@ -106,30 +166,6 @@ app.post("/api/upload", upload.array("pdfs", 50), (req, res) => {
     files: [...files.entries()].map(([id, f]) => ({ id, original: f.original })),
   });
 });
-
-// ▸ Processing asynchrone
-async function processFiles(sid) {
-  const sess = sessions[sid];
-  if (!sess) return;
-
-  for (const [fid, f] of sess.files) {
-    f.status = "processing";
-    try {
-      console.log(`[TRADEX] Traitement : ${f.original}`);
-      const b64 = await pdfToBase64(f.path);
-      const lc = await extractLC(b64);
-      f.lc = lc;
-      f.status = "ok";
-      console.log(`[TRADEX] OK : ${f.original} -> ${lc}`);
-    } catch (e) {
-      console.error(`[TRADEX] ERREUR : ${f.original} — ${e.message}`);
-      f.err = e.message;
-      f.status = "error";
-    }
-  }
-  sess.done = true;
-  console.log(`[TRADEX] Session ${sid} terminee.`);
-}
 
 // ▸ SSE Stream
 app.get("/api/stream/:sid", (req, res) => {
@@ -205,12 +241,8 @@ app.get("/api/download-all/:sid", (req, res) => {
     for (const f of okFiles) {
       let safe = sanitizeFilename(f.lc);
       let name = `${safe}.pdf`;
-      // Gestion des doublons (meme numero LC)
       let n = 1;
-      while (used.has(name)) {
-        name = `${safe}_(${n}).pdf`;
-        n++;
-      }
+      while (used.has(name)) { name = `${safe}_(${n++}).pdf`; }
       used.add(name);
       zip.addLocalFile(f.path, "", name);
     }
@@ -226,28 +258,28 @@ app.get("/api/download-all/:sid", (req, res) => {
   }
 });
 
-// ─── Port libre ────────────────────────────────────────────────────────────
-function freePort(start = 5000) {
+// ─── Port libre ─────────────────────────────────────────────────────────────
+function freePort() {
   const net = require("net");
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     const srv = net.createServer();
-    srv.listen(0, "127.0.0.1", () => {
-      const port = srv.address().port;
-      srv.close(() => resolve(port));
-    });
-    srv.on("error", () => resolve(start));
+    srv.listen(0, "127.0.0.1", () => { const p = srv.address().port; srv.close(() => resolve(p)); });
+    srv.on("error", () => resolve(5000));
   });
 }
 
-// ─── Lancement ─────────────────────────────────────────────────────────────
+// ─── Lancement ──────────────────────────────────────────────────────────────
 (async () => {
   const isProduction = !!process.env.PORT;
-  const port = process.env.PORT || await freePort(5000);
+  const port = process.env.PORT || await freePort();
   const host = isProduction ? "0.0.0.0" : "127.0.0.1";
   const url = `http://${host === "0.0.0.0" ? "localhost" : host}:${port}`;
 
+  // Préchargement du module PDF au démarrage
+  getPdfModule().catch(() => {});
+
   app.listen(port, host, () => {
-    console.log(`\n  TRADEX  --  ${url}\n  Ctrl+C pour arreter.\n`);
+    console.log(`\n  TRADEX  --  ${url}\n  Concurrence : ${_CONCURRENCY} fichiers simultanes\n  Ctrl+C pour arreter.\n`);
     if (!isProduction) {
       const { exec } = require("child_process");
       exec(`start ${url}`);
