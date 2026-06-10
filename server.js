@@ -11,7 +11,7 @@ const _MODEL = process.env.TRADEX_MODEL || "gpt-4.1-mini";
 const _ORIGINAL_MODELS = new Set(["gpt-5.4", "gpt-5.4-pro", "gpt-5.5", "gpt-5.5-pro"]);
 const _PROMPT = "Analyse cette image et trouve la valeur correspondant au 'Numero LC'. Renvoie uniquement le numero exact (majuscules, chiffres, parfois des espaces), sans aucun autre texte ni ponctuation. Exemple : 058ICD 2503674099";
 const _INVALID_CHARS = /[\\/:*?"<>|]/g;
-const _CONCURRENCY = parseInt(process.env.TRADEX_CONCURRENCY || "6", 10);
+const _CONCURRENCY = parseInt(process.env.TRADEX_CONCURRENCY || "3", 10);
 const _SESSION_TTL_MS = 30 * 60 * 1000; // 30 min
 
 // ─── Dossier temp ───────────────────────────────────────────────────────────
