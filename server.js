@@ -62,7 +62,7 @@ function getPdfModule() {
 
 async function pdfToBase64(filePath) {
   const { pdf } = await getPdfModule();
-  const doc = await pdf(filePath, { scale: 2 });
+  const doc = await pdf(filePath, { scale: 1.5 });
   for await (const page of doc) {
     return Buffer.from(page).toString("base64");
   }
