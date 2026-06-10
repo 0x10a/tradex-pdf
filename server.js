@@ -4,7 +4,6 @@ const path = require("path");
 const fs = require("fs");
 const { v4: uuidv4 } = require("uuid");
 const OpenAI = require("openai");
-const AdmZip = require("adm-zip");
 
 // ─── Configuration ─────────────────────────────────────────────────────────
 const _MODEL = process.env.TRADEX_MODEL || "gpt-4.1-mini";
@@ -63,10 +62,14 @@ function getPdfModule() {
 async function pdfToBase64(filePath) {
   const { pdf } = await getPdfModule();
   const doc = await pdf(filePath, { scale: 1.5 });
-  for await (const page of doc) {
-    return Buffer.from(page).toString("base64");
+  try {
+    for await (const page of doc) {
+      return Buffer.from(page).toString("base64");
+    }
+    throw new Error("PDF vide");
+  } finally {
+    await doc.destroy();
   }
-  throw new Error("PDF vide");
 }
 
 // ─── Extraction LC ──────────────────────────────────────────────────────────
@@ -236,7 +239,13 @@ app.get("/api/download-all/:sid", (req, res) => {
   }
 
   try {
-    const zip = new AdmZip();
+    const archiver = require("archiver");
+    const archive = archiver("zip", { zlib: { level: 0 } });
+
+    res.setHeader("Content-Disposition", "attachment; filename=\"TRADEX_export.zip\"");
+    res.setHeader("Content-Type", "application/zip");
+    archive.pipe(res);
+
     const used = new Set();
     for (const f of okFiles) {
       let safe = sanitizeFilename(f.lc);
@@ -244,17 +253,13 @@ app.get("/api/download-all/:sid", (req, res) => {
       let n = 1;
       while (used.has(name)) { name = `${safe}_(${n++}).pdf`; }
       used.add(name);
-      zip.addLocalFile(f.path, "", name);
+      archive.file(f.path, { name });
     }
 
-    const buf = zip.toBuffer();
-    res.setHeader("Content-Disposition", "attachment; filename=\"TRADEX_export.zip\"");
-    res.setHeader("Content-Type", "application/zip");
-    res.setHeader("Content-Length", buf.length);
-    res.send(buf);
+    await archive.finalize();
   } catch (e) {
     console.error("[TRADEX] Erreur ZIP:", e);
-    res.status(500).json({ error: "Erreur creation ZIP." });
+    if (!res.headersSent) res.status(500).json({ error: "Erreur creation ZIP." });
   }
 });
 
