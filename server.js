@@ -239,8 +239,8 @@ app.get("/api/download-all/:sid", async (req, res) => {
   }
 
   try {
-    const archiver = require("archiver");
-    const archive = archiver("zip", { zlib: { level: 0 } });
+    const { ZipArchive } = require("archiver");
+    const archive = new ZipArchive({ zlib: { level: 0 } });
 
     res.setHeader("Content-Disposition", "attachment; filename=\"TRADEX_export.zip\"");
     res.setHeader("Content-Type", "application/zip");
