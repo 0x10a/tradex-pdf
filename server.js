@@ -228,7 +228,7 @@ app.get("/api/download/:sid/:fid", (req, res) => {
 });
 
 // ▸ Download batch ZIP
-app.get("/api/download-all/:sid", (req, res) => {
+app.get("/api/download-all/:sid", async (req, res) => {
   const sid = req.params.sid;
   const sess = sessions[sid];
   if (!sess) return res.status(404).json({ error: "Session inconnue." });
